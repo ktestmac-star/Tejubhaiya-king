@@ -1,12 +1,9 @@
-import { User, UserRole } from '@/types';
-import { LoginCredentials, AuthenticationResult, AuthToken } from '@/types';
+import { User, UserRole, LoginCredentials, AuthenticationResult, AuthToken } from '../types';
 import { ValidationUtils } from '../utils/ValidationUtils';
 import { ErrorHandlingUtils, ErrorType, ErrorSeverity, AppError } from '../utils/ErrorHandlingUtils';
 
-import { ApiService } from './ApiService';
-import { EventEmitter } from 'events';
-import DeviceInfo from 'react-native-device-info';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DeviceUtils } from '../utils/DeviceUtils';
 
 export interface SecurityConfig {
   sessionTimeoutMinutes: number;
@@ -24,9 +21,9 @@ export interface AuthEvent {
   reason?: string;
 }
 
-export class AuthenticationService extends EventEmitter {
+export class AuthenticationService {
   private static instance: AuthenticationService;
-  private apiService: ApiService;
+  private databaseService: any;
   private currentUser: User | null = null;
   private currentToken: string | null = null;
   private revokedUsers: Set<string> = new Set(); // Track revoked user IDs
@@ -34,10 +31,14 @@ export class AuthenticationService extends EventEmitter {
   private securityConfig: SecurityConfig;
   private loginAttempts: Map<string, { count: number; lastAttempt: Date }> = new Map();
   private readonly CURRENT_USER_KEY = 'current_user';
+  private eventListeners: Map<string, Function[]> = new Map();
 
   private constructor() {
-    super();
-    this.apiService = ApiService.getInstance();
+    // Import DatabaseService dynamically to avoid circular dependencies
+    import('./DatabaseService').then(({ DatabaseService }) => {
+      this.databaseService = DatabaseService.getInstance();
+    });
+    
     this.securityConfig = {
       sessionTimeoutMinutes: 30,
       maxLoginAttempts: 3,
@@ -76,7 +77,7 @@ export class AuthenticationService extends EventEmitter {
           timestamp: new Date(),
           reason: 'Account locked due to too many failed attempts'
         };
-        this.emit('loginAttempt', event);
+        console.log('Auth Event:', event);
         
         return {
           success: false,
@@ -102,12 +103,7 @@ export class AuthenticationService extends EventEmitter {
       }
 
       // Get device info
-      const deviceInfo = {
-        deviceId: await DeviceInfo.getUniqueId(),
-        deviceName: await DeviceInfo.getDeviceName(),
-        platform: await DeviceInfo.getSystemName(),
-        version: await DeviceInfo.getSystemVersion()
-      };
+      const deviceInfo = await DeviceUtils.getDeviceInfo();
 
       // Call API service for authentication
       const response = await this.apiService.login({
@@ -165,7 +161,7 @@ export class AuthenticationService extends EventEmitter {
           success: true,
           timestamp: new Date()
         };
-        this.emit('loginAttempt', event);
+        console.log('Auth Event:', event);
         
         return {
           success: true,
@@ -191,7 +187,7 @@ export class AuthenticationService extends EventEmitter {
         timestamp: new Date(),
         reason: errorMessage
       };
-      this.emit('loginAttempt', event);
+      console.log('Auth Event:', event);
       
       return {
         success: false,
@@ -299,14 +295,14 @@ export class AuthenticationService extends EventEmitter {
       this.currentToken = null;
     }
     
-    // Emit access revoked event
+    // Log access revoked event
     const event: AuthEvent = {
       type: 'accessRevoked',
       userId: userId,
       timestamp: new Date(),
       reason: 'User access revoked by administrator'
     };
-    this.emit('accessRevoked', event);
+    console.log('Auth Event:', event);
   }
 
   /**
@@ -392,7 +388,7 @@ export class AuthenticationService extends EventEmitter {
           timestamp: new Date(),
           reason: 'Session timeout'
         };
-        this.emit('sessionExpired', event);
+        console.log('Auth Event:', event);
       }
     }
     

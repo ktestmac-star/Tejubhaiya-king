@@ -1,61 +1,69 @@
 import { useState, useEffect } from 'react';
-import { User, LoginCredentials, AuthenticationResult } from '../types';
-import { AuthenticationService } from '../services/AuthenticationService';
+import { User, LoginCredentials, AuthResult } from '../types';
+import { AuthService } from '../services/AuthService';
 
 export const useAuth = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const authService = AuthenticationService.getInstance();
+  const authService = AuthService.getInstance();
 
   useEffect(() => {
-    // Check if user is already authenticated on app start
-    const currentUser = authService.getCurrentUser();
-    if (currentUser && authService.isAuthenticated()) {
-      setUser(currentUser);
-      setIsAuthenticated(true);
-    }
-    setIsLoading(false);
+    initializeAuth();
   }, []);
 
-  const login = async (credentials: LoginCredentials): Promise<AuthenticationResult> => {
-    setIsLoading(true);
+  const initializeAuth = async () => {
     try {
-      const result = await authService.authenticate(credentials);
-      
-      if (result.success && result.user) {
-        setUser(result.user);
+      await authService.initialize();
+      const user = authService.getCurrentUser();
+      if (user) {
+        setCurrentUser(user);
         setIsAuthenticated(true);
       }
-      
-      return result;
+    } catch (error) {
+      console.error('Auth initialization error:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const logout = () => {
-    authService.logout();
-    setUser(null);
-    setIsAuthenticated(false);
+  const login = async (credentials: LoginCredentials): Promise<AuthResult> => {
+    try {
+      const result = await authService.login(credentials);
+      if (result.success && result.user) {
+        setCurrentUser(result.user);
+        setIsAuthenticated(true);
+      }
+      return result;
+    } catch (error) {
+      return {
+        success: false,
+        error: 'Login failed'
+      };
+    }
   };
 
-  const hasRole = (role: string) => {
-    return user?.role === role;
+  const logout = async () => {
+    try {
+      await authService.logout();
+      setCurrentUser(null);
+      setIsAuthenticated(false);
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
-  const hasAnyRole = (roles: string[]) => {
-    return user ? roles.includes(user.role) : false;
+  const getTestCredentials = () => {
+    return authService.getTestCredentials();
   };
 
   return {
-    user,
     isAuthenticated,
+    currentUser,
     isLoading,
     login,
     logout,
-    hasRole,
-    hasAnyRole,
+    getTestCredentials
   };
 };

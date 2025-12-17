@@ -1,36 +1,68 @@
-import React, { useEffect } from 'react';
-import { StatusBar } from 'react-native';
-import { AppNavigator } from './navigation/AppNavigator';
-import { AuthenticationService } from './services/AuthenticationService';
-import { ApiService } from './services/ApiService';
+import React from 'react';
+import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack';
+import { useAuth } from './hooks/useAuth';
+import { LoginScreen } from './screens/LoginScreen';
+import { OperatorDashboard } from './screens/OperatorDashboard';
+import { ManagerDashboard } from './screens/ManagerDashboard';
+import { OwnerDashboard } from './screens/OwnerDashboard';
 
-function App(): JSX.Element {
-  useEffect(() => {
-    // Initialize services on app startup
-    const initializeServices = async () => {
-      try {
-        // Initialize authentication service
-        const authService = AuthenticationService.getInstance();
-        await authService.initialize();
-        
-        // Initialize API service
-        const apiService = ApiService.getInstance();
-        
-        console.log('Services initialized successfully');
-      } catch (error) {
-        console.error('Failed to initialize services:', error);
-      }
-    };
+const Stack = createStackNavigator();
 
-    initializeServices();
-  }, []);
+const App: React.FC = () => {
+  const { isAuthenticated, currentUser, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#3498db" />
+      </View>
+    );
+  }
+
+  const getDashboardComponent = () => {
+    if (!currentUser) return LoginScreen;
+    
+    switch (currentUser.role) {
+      case 'OWNER':
+        return OwnerDashboard;
+      case 'MANAGER':
+        return ManagerDashboard;
+      case 'OPERATOR':
+        return OperatorDashboard;
+      default:
+        return LoginScreen;
+    }
+  };
 
   return (
-    <>
-      <StatusBar barStyle="dark-content" />
-      <AppNavigator />
-    </>
+    <NavigationContainer>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {isAuthenticated ? (
+          <Stack.Screen 
+            name="Dashboard" 
+            component={getDashboardComponent()} 
+          />
+        ) : (
+          <Stack.Screen name="Login" component={LoginScreen} />
+        )}
+      </Stack.Navigator>
+    </NavigationContainer>
   );
-}
+};
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f7fa',
+    ...(Platform.OS === 'web' && {
+      minHeight: '100vh' as any,
+      width: '100vw' as any,
+    }),
+  },
+});
 
 export default App;
